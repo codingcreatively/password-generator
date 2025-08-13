@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SecureGen — Password & Hash Toolkit</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+<style>
+  :root{
+    --bg-1: #041022;
+    --bg-2: #062035;
+    --accent-a: #3bdcf6;
+    --accent-b: #8b6bff;
+    --card-bg: rgba(255,255,255,0.97);
+    --muted: #9fb3c9;
+    --glass: rgba(255,255,255,0.06);
+  }
+  html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+  body{
+    background: linear-gradient(180deg,var(--bg-1) 0%, #07182a 40%, var(--bg-2) 100%);
+    color: #eaf6ff;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    overflow-y:auto;
+  }
+
+  #bgCanvas {
+    position: fixed;
+    inset: 0;
+    z-index: -3;
+    display:block;
+  }
+  .bg-overlay {
+    position: fixed; inset: 0; z-index:-2;
+    background: linear-gradient(180deg, rgba(2,6,23,0.18), rgba(2,6,23,0.6));
+    pointer-events:none;
+  }
+
+  .blob {
+    position: fixed; border-radius: 24px; filter: blur(28px); opacity: 0.14; z-index:-1;
+  }
+  .blob.b1{width:460px;height:360px; left:-120px; top:-60px; background: linear-gradient(120deg,var(--accent-a),var(--accent-b)); animation: bob 20s ease-in-out infinite;}
+  .blob.b2{width:300px;height:260px; right:-80px; top:20px; background: linear-gradient(120deg,#6bc9ff,#7b61ff); animation: bob 24s ease-in-out infinite reverse;}
+  @keyframes bob { from{transform:translateY(0)} to{transform:translateY(-30px)} }
+
+  .container-wrap {
+    max-width: 980px;
+    margin: 36px auto;
+    padding: 18px;
+    display:grid;
+    grid-template-columns: 1fr 420px;
+    gap:20px;
+  }
+  @media (max-width:960px){
+    .container-wrap{ grid-template-columns: 1fr; padding:14px; }
+  }
+
+  #intro {
+    position: fixed; inset:0; z-index:60;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(2,8,18,0.86);
+    transition:opacity .6s ease, visibility .6s ease;
+  }
+  #intro.hidden { opacity:0; visibility:hidden; pointer-events:none; }
+  .intro-card {
+    width:min(880px,94%); padding:28px; border-radius:14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+    box-shadow: 0 18px 48px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.04);
+    text-align:center; color:#eaf6ff;
+    transform-origin:center;
+    animation: popIn .7s cubic-bezier(.17,.85,.3,1);
+  }
+  @keyframes popIn {from{opacity:0; transform:translateY(12px) scale(.98);} to{opacity:1; transform:translateY(0) scale(1);} }
+  .intro-title{ font-size:1.8rem; margin:0; letter-spacing:-0.01em; }
+  .intro-desc{ color:var(--muted); margin:12px 0 6px; font-size:1rem; max-width:760px; margin-left:auto; margin-right:auto; }
+  .typewriter{ color:#dff8ff; font-size:0.98rem; min-height:22px; margin-top:6px; }
+  .intro-actions{ margin-top:18px; display:flex; gap:12px; justify-content:center; }
+
+  .btn {
+    background: linear-gradient(90deg,var(--accent-a), var(--accent-b));
+    color:#041022; border:none; padding:10px 16px; border-radius:10px; cursor:pointer; font-weight:700;
+    box-shadow: 0 8px 26px rgba(59,123,255,0.12); transition: transform .16s ease, box-shadow .16s ease;
+  }
+  .btn:hover{ transform: translateY(-4px); box-shadow: 0 14px 40px rgba(59,123,255,0.18); }
+  .btn.ghost { background: transparent; color:var(--accent-a); border:1px solid rgba(123,97,255,0.12); }
+
+  .card {
+    background: var(--card-bg);
+    color:#071827;
+    border-radius:12px; padding:18px; border:1px solid rgba(3,12,20,0.06);
+    box-shadow: 0 10px 30px rgba(2,8,23,0.45);
+    transition: transform .22s ease, box-shadow .22s ease;
+  }
+  .card:hover{ transform: translateY(-6px) scale(1.01); box-shadow: 0 20px 48px rgba(2,8,23,0.55); }
+  .card h3 { margin:0 0 6px; font-size:1.05rem; color:#032033; }
+  .muted { color:var(--muted); font-size:0.95rem; margin-bottom:8px; }
+
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .col { flex:1; min-width:120px; }
+  input[type="text"], select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(6,18,28,0.06); font-size:0.95rem; background:#fff;}
+  .checkbox { display:inline-flex; gap:8px; align-items:center; background: linear-gradient(180deg,#fbfbfb,#f2f7ff); padding:8px 10px; border-radius:9px; color:#073242; border:1px solid rgba(0,0,0,0.04); margin-right:8px; }
+
+  .range-wrap { display:flex; gap:10px; align-items:center; }
+  input[type="range"]{ width:100%; accent-color: var(--accent-a); }
+
+  .outputLine {
+    margin-top:12px;
+    background: linear-gradient(180deg,#f8fbfd,#eef6ff);
+    border-radius:10px; padding:12px; font-family: ui-monospace, "Roboto Mono", monospace;
+    color:#041827; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    min-height:48px; overflow:hidden;
+  }
+  .outputText { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px; font-size:1.02rem; }
+
+  .action-row { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  .smallBtn {
+    flex:1; padding:10px 12px; border-radius:10px; border:none; cursor:pointer; font-weight:700;
+    background: linear-gradient(90deg,#001428, #00243a); color: #f7fcff; transition:transform .14s ease, box-shadow .14s ease;
+  }
+  .smallBtn.ghost { background:transparent; border:1px solid rgba(6,18,28,0.06); color:#072033; }
+  .smallBtn:hover{ transform:translateY(-3px); box-shadow: 0 10px 20px rgba(0,18,40,0.14); }
+  .contact {
+    text-align:center; margin-top:18px; color:var(--muted); font-size:0.95rem;
+  }
+  .contact .socials { display:flex; gap:10px; justify-content:center; margin-top:10px; }
+  .social {
+    display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:10px; text-decoration:none; color:#041827;
+    background: linear-gradient(180deg,#f6faff,#eef6ff); box-shadow: 0 6px 20px rgba(2,8,20,0.06); font-weight:700;
+  }
+  .social .icon { width:18px; height:18px; display:inline-block; }
+
+  @media (max-width:560px){
+    .smallBtn{ font-size:0.95rem; padding:12px; }
+    .outputLine{ font-size:1rem; min-height:56px; }
+  }
+  
+  #hashInput {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div class="bg-overlay" aria-hidden="true"></div>
+<div class="blob b1" aria-hidden="true"></div>
+<div class="blob b2" aria-hidden="true"></div>
+
+<div id="intro" role="dialog" aria-labelledby="introTitle">
+  <div class="intro-card">
+    <h1 id="introTitle" class="intro-title">SecureGen — Strong passwords in seconds</h1>
+    <p class="intro-desc">A small toolkit to securely create random passwords, name-based variations and cryptographic hashes — everything runs locally in your browser.</p>
+    <div class="typewriter" id="typewriter"></div>
+    <div class="intro-actions">
+      <button id="startBtn" class="btn" title="Start">Get started</button>
+    </div>
+  </div>
+</div>
+
+<main class="container-wrap" id="app" style="display:none;">
+
+  <section class="card" aria-labelledby="pwTitle" id="passwordCard">
+    <h3 id="pwTitle">Password Generator</h3>
+    <p class="muted">Random password generator. Choose length and character sets.</p>
+
+    <div style="margin-top:8px;">
+      <label class="muted" for="pwLength">Length</label>
+      <div class="range-wrap">
+        <input id="pwLength" type="range" min="6" max="32" value="16" oninput="pwLenDisplay.textContent = pwLength.value">
+        <div id="pwLenDisplay" style="min-width:46px; text-align:right; font-weight:700; color:#032033;">16</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <label class="checkbox"><input id="chkUpper" type="checkbox" checked> Uppercase</label>
+      <label class="checkbox"><input id="chkLower" type="checkbox" checked> Lowercase</label>
+      <label class="checkbox"><input id="chkNumber" type="checkbox" checked> Numbers</label>
+      <label class="checkbox"><input id="chkSymbol" type="checkbox" checked> Symbols</label>
+    </div>
+
+    <div style="margin-top:14px;">
+      <button class="btn" onclick="generatePassword()">Generate Password</button>
+    </div>
+
+    <div id="pwOutputWrap" style="display:none;">
+      <div class="outputLine" aria-live="polite">
+        <div class="outputText" id="pwOutput"></div>
+      </div>
+      <div class="action-row">
+        <button class="smallBtn" onclick="copyText('pwOutput')">Copy</button>
+        <button class="smallBtn ghost" onclick="clearOutput('pwOutput','pwOutputWrap')">Clear</button>
+        <button class="smallBtn ghost" onclick="toggleVisibility('pwOutput')">Hide/Show</button>
+      </div>
+      <div class="muted" style="margin-top:10px;">Tip: Keep passwords private and store them in a secure manager.</div>
+    </div>
+  </section>
+
+  <aside style="display:flex; flex-direction:column; gap:20px;">
+
+    <div class="card" id="nameCard">
+      <h3>Name-based Password</h3>
+      <p class="muted">Enter a name or phrase and generate a deterministic-ish but randomized password. Use <strong>Generate Another</strong> to get a different variation in the same box.</p>
+
+      <div class="row" style="margin-top:8px;">
+        <div class="col"><input id="nameInput" type="text" placeholder="Enter name or phrase"></div>
+        <div style="width:120px">
+          <select id="nameLength" style="padding:10px 12px;">
+            <option value="8">8</option>
+            <option value="12" selected>12</option>
+            <option value="16">16</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="action-row" style="margin-top:12px;">
+        <button class="btn" onclick="generateName(false)">Generate</button>
+        <button class="btn ghost" onclick="generateName(true)">Generate Another</button>
+      </div>
+
+      <div id="nameOutputWrap" style="display:none;">
+        <div class="outputLine" aria-live="polite"><div class="outputText" id="nameOutput"></div></div>
+        <div class="action-row">
+          <button class="smallBtn" onclick="copyText('nameOutput')">Copy</button>
+          <button class="smallBtn ghost" onclick="clearOutput('nameOutput','nameOutputWrap')">Clear</button>
+          <button class="smallBtn ghost" onclick="toggleVisibility('nameOutput')">Hide/Show</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="hashCard">
+      <h3>Hash Generator</h3>
+      <p class="muted">Compute MD5 / SHA-1 / SHA-256 / SHA-512 of any text.</p>
+
+      <div style="margin-top:8px;">
+        <input id="hashInput" type="text" placeholder="Enter text" class="inputField">
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <div style="width:145px"><select id="hashAlgo" style="padding:10px 12px;">
+          <option>MD5</option><option>SHA-1</option><option selected>SHA-256</option><option>SHA-512</option>
+        </select></div>
+        <div class="col"><button class="btn" onclick="generateHash()">Generate Hash</button></div>
+      </div>
+
+      <div id="hashOutputWrap" style="display:none;">
+        <div class="outputLine" aria-live="polite"><div class="outputText" id="hashOutput"></div></div>
+        <div class="action-row">
+          <button class="smallBtn" onclick="copyText('hashOutput')">Copy</button>
+          <button class="smallBtn ghost" onclick="clearOutput('hashOutput','hashOutputWrap')">Clear</button>
+          <button class="smallBtn ghost" onclick="toggleVisibility('hashOutput')">Hide/Show</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Contact Developer</h3>
+      <p class="muted">If you have an issue or suggestion, contact the developer:</p>
+      <div class="contact">
+        <div class="socials">
+          <a class="social" target="_blank" rel="noopener" href="https://www.instagram.com/coding_creatively?igsh=MWs4bGNnZ3R0dmhneg==">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="5" fill="#E1306C"/><path d="M15 8.5a.9.9 0 11-1.8 0 .9.9 0 011.8 0zM12 8.2a3.8 3.8 0 100 7.6 3.8 3.8 0 000-7.6z" fill="#fff"/></svg>
+            Instagram
+          </a>
+
+          <a class="social" target="_blank" rel="noopener" href="https://t.me/cashhustle_8">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="2.5" width="19" height="19" rx="4" fill="#2AABEE"/><path d="M6.4 12.5l10.8-4.6c.3-.1.6.1.5.4l-2 9.3c-.1.3-.4.5-.7.4l-3-2-1.3 1.3c-.1.1-.2.2-.4.2l.2-3.7L6.4 12.5z" fill="#fff"/></svg>
+            Telegram
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<script>
+  
+(function(){
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width = innerWidth;
+  let H = canvas.height = innerHeight;
+  window.addEventListener('resize', ()=>{ W=canvas.width=innerWidth; H=canvas.height=innerHeight; init(); });
+
+  const nodes = [];
+  const NODE_COUNT = Math.max(18, Math.floor((W*H)/80000)); // scalable
+  function init(){
+    nodes.length=0;
+    for(let i=0;i<NODE_COUNT;i++){
+      nodes.push({
+        x: Math.random()*W,
+        y: Math.random()*H,
+        vx: (Math.random()-0.5)*0.3,
+        vy: (Math.random()-0.5)*0.3,
+        r: Math.random()*1.6 + 1.2
+      });
+    }
+  }
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const grad = ctx.createLinearGradient(0,0,W,H);
+    grad.addColorStop(0, 'rgba(10,20,30,0.06)');
+    grad.addColorStop(1, 'rgba(5,10,20,0.1)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,W,H);
+
+    for(let i=0;i<nodes.length;i++){
+      for(let j=i+1;j<nodes.length;j++){
+        const d = dist(nodes[i], nodes[j]);
+        if(d < Math.min(W,H)/5){
+          const alpha = 0.12 * (1 - d/(Math.min(W,H)/5));
+          ctx.strokeStyle = `rgba(59,180,255,${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    for(const n of nodes){
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(59,180,255,0.12)';
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    for(const n of nodes){
+      n.x += n.vx; n.y += n.vy;
+      if(n.x < -20) n.x = W + 20;
+      if(n.x > W + 20) n.x = -20;
+      if(n.y < -20) n.y = H + 20;
+      if(n.y > H + 20) n.y = -20;
+    }
+    requestAnimationFrame(draw);
+  }
+
+  init();
+  draw();
+})();
+
+/* Intro typewriter */
+const intro = document.getElementById('intro');
+const startBtn = document.getElementById('startBtn');
+const app = document.getElementById('app');
+const typeEl = document.getElementById('typewriter');
+const typeText = "Secure, fast, private — everything runs locally in your browser. No data leaves your device.";
+let tIndex = 0;
+function typeTick(){
+  if(tIndex <= typeText.length){
+    typeEl.textContent = typeText.slice(0, tIndex++);
+    setTimeout(typeTick, 18);
+  }
+}
+typeTick();
+function revealApp(){
+  intro.classList.add('hidden');
+  setTimeout(()=>{ intro.style.display='none'; app.style.display='grid'; window.scrollTo({top:0, behavior:'smooth'}); }, 580);
+}
+startBtn.addEventListener('click', revealApp);
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function shuffleStr(s){ return s.split('').sort(()=>0.5-Math.random()).join(''); }
+
+/* Password generator */
+function generatePassword(){
+  const length = parseInt(document.getElementById('pwLength').value || 16);
+  const useUpper = document.getElementById('chkUpper').checked;
+  const useLower = document.getElementById('chkLower').checked;
+  const useNum   = document.getElementById('chkNumber').checked;
+  const useSym   = document.getElementById('chkSymbol').checked;
+
+  let pool = "";
+  if(useUpper) pool += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if(useLower) pool += "abcdefghijklmnopqrstuvwxyz";
+  if(useNum) pool += "0123456789";
+  if(useSym) pool += "!@#$%^&*()_+-=[]{}|;:,.<>?";
+
+  if(!pool){
+    alert("Please enable at least one character set.");
+    return;
+  }
+  const guaranteed = [];
+  if(useUpper) guaranteed.push(randomChar("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+  if(useLower) guaranteed.push(randomChar("abcdefghijklmnopqrstuvwxyz"));
+  if(useNum) guaranteed.push(randomChar("0123456789"));
+  if(useSym) guaranteed.push(randomChar("!@#$%^&*()_+-=[]{}|;:,.<>?"));
+
+  const outArr = [];
+  for(let i=0;i<length - guaranteed.length;i++){
+    outArr.push(randomChar(pool));
+  }
+  const combined = shuffleStr(outArr.concat(guaranteed).join('')).substring(0, length);
+
+  showOutput('pwOutput', 'pwOutputWrap', combined);
+  setTimeout(()=> { try{ window.navigator.vibrate && window.navigator.vibrate(20); }catch(e){} }, 50);
+  setTimeout(()=> alert("Please keep your password safely."), 90);
+}
+function randomChar(s){ return s.charAt(randInt(0, s.length-1)); }
+
+function generateName(generateAnother){
+  const name = (document.getElementById('nameInput').value || '').trim();
+  const length = parseInt(document.getElementById('nameLength').value || 12);
+  if(!name){ 
+    alert("Please enter a name or phrase."); 
+    return; 
+  }
+
+  const letters = name.replace(/\s+/g,'');
+  const alt = letters.split('').map((c,i)=> i%2 ? c.toLowerCase() : c.toUpperCase()).join('');
+  const salt = String(Date.now()).slice(-6) + randInt(0,9999);
+  let symbols = "!@#$%^&*()-_+=";
+  let seed = (alt + salt + symbols.charAt(randInt(0, symbols.length-1)));
+  seed = shuffleStr(seed);
+
+  let pw = '';
+  for(let i=0; pw.length < length; i++){
+    pw += seed.charAt(i % seed.length);
+    if(i > 500) break;
+  }
+  pw = pw.substring(0, length);
+  const current = document.getElementById('nameOutput').textContent || '';
+  if(generateAnother && current && current === pw){
+    pw = shuffleStr(pw + randInt(0,9999)).substring(0,length);
+  }
+
+  showOutput('nameOutput', 'nameOutputWrap', pw);
+  if (!generateAnother) {
+    setTimeout(() => alert("Please keep your password safely."), 90);
+  }
+}
+
+/*  Hash generator  */
+function generateHash(){
+  const text = (document.getElementById('hashInput').value || '').trim();
+  const algo = (document.getElementById('hashAlgo').value || 'SHA-256');
+  if(!text){ alert("Please enter text to hash."); return; }
+  let out;
+  if(algo === 'MD5') out = CryptoJS.MD5(text).toString();
+  else if(algo === 'SHA-1') out = CryptoJS.SHA1(text).toString();
+  else if(algo === 'SHA-256') out = CryptoJS.SHA256(text).toString();
+  else if(algo === 'SHA-512') out = CryptoJS.SHA512(text).toString();
+  else out = CryptoJS.SHA256(text).toString();
+
+  showOutput('hashOutput','hashOutputWrap', out);
+  setTimeout(()=> alert("Please keep your password/hash safely."), 90);
+}
+
+function showOutput(elId, wrapId, text){
+  const outEl = document.getElementById(elId);
+  const wrap = document.getElementById(wrapId);
+  outEl.style.opacity = 0;
+  outEl.textContent = text;
+  wrap.style.display = 'block';
+  outEl.style.transition = 'opacity .25s ease';
+  requestAnimationFrame(()=> { outEl.style.opacity = 1; });
+}
+
+function copyText(id){
+  const el = document.getElementById(id);
+  const txt = el.textContent || '';
+  if(!txt){ alert("Nothing to copy"); return; }
+  navigator.clipboard.writeText(txt).then(()=> {
+    try{ window.navigator.vibrate && window.navigator.vibrate(20); }catch(e){}
+    showToast("Copied to clipboard");
+  }).catch(()=> alert("Copy failed — try manual copy"));
+}
+function clearOutput(outId, wrapId){
+  const out = document.getElementById(outId);
+  out.textContent = '';
+  if(wrapId) document.getElementById(wrapId).style.display = 'none';
+}
+function toggleVisibility(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.display = (getComputedStyle(el).display === 'none') ? 'block' : 'none';
+}
+
+let toastTimer = null;
+function showToast(message){
+  let t = document.getElementById('sgToast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'sgToast';
+    t.style.position = 'fixed';
+    t.style.left = '50%';
+    t.style.bottom = '28px';
+    t.style.transform = 'translateX(-50%)';
+    t.style.background = 'linear-gradient(90deg,var(--accent-a),var(--accent-b))';
+    t.style.color = '#021027';
+    t.style.padding = '10px 16px';
+    t.style.borderRadius = '10px';
+    t.style.boxShadow = '0 8px 26px rgba(59,123,255,0.12)';
+    t.style.fontWeight = '700';
+    t.style.zIndex = 90;
+    document.body.appendChild(t);
+  }
+  t.textContent = message;
+  t.style.opacity = '1';
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> { t.style.opacity = '0'; }, 1700);
+}
+
+document.getElementById('nameInput').addEventListener('keydown', e => { if(e.key === 'Enter') generateName(false); });
+document.getElementById('hashInput').addEventListener('keydown', e => { if(e.key === 'Enter') generateHash(); });
+
+window.addEventListener('load', () => {
+  const pwLength = document.getElementById('pwLength');
+  if(pwLength) document.getElementById('pwLenDisplay').textContent = pwLength.value;
+});
+  
+  let passwordNoticeShown = false;
+
+function showPasswordNoticeOnce() {
+    if (!passwordNoticeShown) {
+        alert("Please keep your password safely.");
+        passwordNoticeShown = true;
+    }
+}
+</script>
+
+</body>
+</html>
